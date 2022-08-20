@@ -120,6 +120,60 @@ bool AB1805::usingRCOscillator() {
     }
 }
 
+bool AB1805::IRQClockOut() {
+    bool bResult;
+    static const char *errorMsg = "failure in IRQClockOut %d";
+    
+    // First let's log the current register values
+    _log.info("REG_SQW=0x%2x", readRegister(REG_SQW));
+    _log.info("REG_CTRL_1=0x%2x", readRegister(REG_CTRL_1));
+    _log.info("REG_CTRL_2=0x%2x", readRegister(REG_CTRL_2));
+    
+    //Requires setting Ctrl_1_Out = 1 to enable the Square Wave output. 
+    bResult = maskRegister(REG_CTRL_2, ~REG_CTRL_1_OUT, 0xff);
+
+    // Set FOUT/nIRQ control in Control2 to SQW
+    bResult = maskRegister(REG_CTRL_2, ~REG_CTRL_2_OUT1S_MASK, REG_CTRL_2_OUT1S_SQW);
+    if (!bResult) {
+        _log.error(errorMsg, __LINE__);
+        return false;
+    }
+
+    // Set REQ_SQW to the desired frequency and enable SQWE 
+    bResult = writeRegister(REG_SQW, REQ_SQW_32768SQWE);
+    if (!bResult) {
+        _log.error(errorMsg, __LINE__);
+        return false;
+    }
+
+    // Let's print the registers after to confirm we wrote them correctly
+    _log.info("IRQ is 32768 hz Output");
+    _log.info("REG_SQW=0x%2x", readRegister(REG_SQW));
+    _log.info("REG_CTRL_1=0x%2x", readRegister(REG_CTRL_1));
+    _log.info("REG_CTRL_2=0x%2x", readRegister(REG_CTRL_2));
+
+    return true;
+}
+
+bool AB1805::setCalXT(uint8_t CAL_XT_Value) {
+    bool bResult;
+    static const char *errorMsg = "failure in IRQClockOut %d";
+
+    _log.info("REG_CAL_XT=0x%2x", readRegister(REG_CAL_XT));
+    
+    //Adjust the XT Calibration Registers based on the value sent
+     bResult = writeRegister(REG_CAL_XT, CAL_XT_Value);
+     if (!bResult) {
+        _log.error(errorMsg, __LINE__);
+        return false;
+    }
+
+    _log.info("REG_CAL_XT=0x%2x", readRegister(REG_CAL_XT));
+    _log.info("Calibration is set");
+
+    return true;
+}
+
 bool AB1805::resetConfig(uint32_t flags) {
     _log.trace("resetConfig(0x%08lx)", flags);
 

@@ -90,6 +90,20 @@ public:
     bool usingRCOscillator();
 
     /**
+     * @brief Set the IRQ output to be the 32,678kHZ clock output. Used for digital calibration of the RTC using a scope. 
+     * 
+     * @return true if function called successfully
+     */
+    bool IRQClockOut();
+
+    /**
+     * @brief Adjust the XT Calibration register for more precise timekeeping as part of the XT digital calibration process
+     * 
+     * @return true if function called successfully
+     */
+    bool setCalXT(uint8_t CAL_XT_Value);
+
+    /**
      * @brief Returns true if the RTC has been set
      * 
      * On cold power-up before cloud connecting, this will be false. Note that
@@ -821,6 +835,8 @@ public:
     static const uint8_t REG_SQW                    = 0x13;      //!< Square wave output control
     static const uint8_t   REG_SQW_SQWE             = 0x80;      //!< Square wave output control, enable
     static const uint8_t   REG_SQW_DEFAULT          = 0x26;      //!< Square wave output control, default 0b00100110
+    static const uint8_t   REQ_SQW_32768SQWE        = 0xA1;      //!< Square wave output control, enable at 32.768 kHz
+    static const uint8_t   REQ_SQW_1SQWE            = 0xAF;      //!< Square wave output control, enable at 1 kHz  
     static const uint8_t REG_CAL_XT                 = 0x14;      //!< Calibration for the XT oscillator
     static const uint8_t REG_CAL_RC_HIGH            = 0x15;      //!< Calibration for the RC oscillator, upper 8 bits
     static const uint8_t REG_CAL_RC_LOW             = 0x16;      //!< Calibration for the RC oscillator, lower 8 bits
