@@ -33,8 +33,9 @@ void AB1805::setup(bool callBegin) {
         if (isBitClear(REG_CTRL_1, REG_CTRL_1_WRTC) && !Time.isValid()) {
             // Set system clock from RTC
             time_t time;
+            uint8_t hundredths;
 
-            getRtcAsTime(time);
+            getRtcAsTime(time, hundredths);
             Time.setTime(time);
 
             _log.info("set system clock from RTC %s", Time.format(time, TIME_FORMAT_DEFAULT).c_str());
@@ -52,10 +53,11 @@ void AB1805::loop() {
         timeSet = true;
 
         time_t time = Time.now();
+        uint8_t hundredths;
         setRtcFromTime(time);
 
         time = 0;
-        getRtcAsTime(time);
+        getRtcAsTime(time, hundredths);
         _log.info("set RTC from cloud %s", Time.format(time, TIME_FORMAT_DEFAULT).c_str());
 
     }
@@ -251,22 +253,22 @@ bool AB1805::setRtcFromSystem() {
     }
 }
 
-bool AB1805::setRtcFromTime(time_t time, bool lock) {
+bool AB1805::setRtcFromTime(time_t time, uint8_t hundredths,  bool lock) {
     struct tm *tm = gmtime(&time);
-    return setRtcFromTm(tm, lock);
+    return setRtcFromTm(tm, hundredths, lock);
 }
 
-bool AB1805::setRtcFromTm(const struct tm *timeptr, bool lock) {
+bool AB1805::setRtcFromTm(const struct tm *timeptr, uint8_t hundredths,  bool lock) {
     static const char *errorMsg = "failure in setRtcFromTm %d";
     uint8_t array[8];
 
-    _log.info("setRtcAsTm %s", tmToString(timeptr).c_str());
+    _log.info("setRtcAsTm %s.%d", tmToString(timeptr).c_str(),hundredths);
 
     if (lock) {
         wire.lock();
     }
 
-    array[0] = 0x00; // hundredths
+    array[0] = valueToBcd(hundredths); // hundredths
     tmToRegisters(timeptr, &array[1], true);
 
     // Can only write RTC registers when WRTC is 1
@@ -293,22 +295,24 @@ bool AB1805::setRtcFromTm(const struct tm *timeptr, bool lock) {
     return bResult;
 }
 
-bool AB1805::getRtcAsTime(time_t &time) {
+bool AB1805::getRtcAsTime(time_t &time, uint8_t &hundredths) {
     struct tm tmstruct;
+    uint8_t _hundredths;
 
-    bool bResult = getRtcAsTm(&tmstruct);
+    bool bResult = getRtcAsTm(&tmstruct, _hundredths);
     if (bResult) {
         // Technically mktime is local time, not UTC. However, the standard library
         // is set at +0000 so the local time happens to also be UTC. This is the
         // case even if Time.zone() is called, which only affects the Wiring
         // API and does not affect the standard time library.
         time = mktime(&tmstruct);
+        hundredths = _hundredths;
     }
 
     return bResult;   
 }
 
-bool AB1805::getRtcAsTm(struct tm *timeptr) {
+bool AB1805::getRtcAsTm(struct tm *timeptr, uint8_t &hundredths) {
     uint8_t array[8];
     bool bResult = false;
 
@@ -318,8 +322,9 @@ bool AB1805::getRtcAsTm(struct tm *timeptr) {
         bResult = readRegisters(REG_HUNDREDTH, array, sizeof(array));
         if (bResult) {
             registersToTm(&array[1], timeptr, true);
+            hundredths = bcdToValue(array[0]);
 
-            _log.info("getRtcAsTm %s", tmToString(timeptr).c_str());
+            _log.info("getRtcAsTm %s.%d", tmToString(timeptr).c_str(), hundredths);
         }
     }
     if (!bResult) {
@@ -353,16 +358,16 @@ bool AB1805::testEN() {
 }  
 #endif
 
-bool AB1805::interruptAtTime(time_t time) {
+bool AB1805::interruptAtTime(time_t time, uint8_t hundredths) {
     struct tm *tm = gmtime(&time);
-    return interruptAtTm(tm);
+    return interruptAtTm(tm, hundredths);
 }
 
-bool AB1805::interruptAtTm(struct tm *timeptr) {
-    return repeatingInterrupt(timeptr, REG_TIMER_CTRL_RPT_DATE);
+bool AB1805::interruptAtTm(struct tm *timeptr, uint8_t hundredths) {
+    return repeatingInterrupt(timeptr, REG_TIMER_CTRL_RPT_DATE, hundredths);
 }
 
-bool AB1805::repeatingInterrupt(struct tm *timeptr, uint8_t rptValue) {
+bool AB1805::repeatingInterrupt(struct tm *timeptr, uint8_t rptValue, uint8_t hundredths) {
     static const char *errorMsg = "failure in repeatingInterrupt %d";
     bool bResult;
 
@@ -383,7 +388,7 @@ bool AB1805::repeatingInterrupt(struct tm *timeptr, uint8_t rptValue) {
     // Set alarm registers
     uint8_t array[7];
 
-    array[0] = 0x00; // hundredths
+    array[0] = valueToBcd(hundredths); // hundredths
     tmToRegisters(timeptr, &array[1], false);
 
     bResult = writeRegisters(REG_HUNDREDTH_ALARM, array, sizeof(array));

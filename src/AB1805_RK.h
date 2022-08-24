@@ -154,18 +154,22 @@ public:
      * 
      * @param time Filled in with the number of second since January 1, 1970 UTC.
      * 
+     * @param hundredths Filled in with the current hundredths of a second
+     * 
      * @return true on success or false if an error occurs.
      * 
      * The time value is basically the same as what would be returned from `Time.now()`
      * except it's retrieved from the AB1805 RTC instead of the system. However both
      * should approximately equal to each other.
      */
-    bool getRtcAsTime(time_t &time);
+    bool getRtcAsTime(time_t &time, uint8_t &hundredths);
 
     /**
      * @brief Get the time from the RTC as a struct tm
      * 
      * @param timeptr pointer to struct tm. Filled in with the current time, UTC.
+     * 
+     * @param hundredths Filled in with the current hundredths of a second
      * 
      * @return true on success or false if an error occurs.
      * 
@@ -183,7 +187,7 @@ public:
      * - tm_year  years since 1900 (note: 2020 = 120)
      * - tm_wday  days since Sunday	0-6
      */
-    bool getRtcAsTm(struct tm *timeptr);
+    bool getRtcAsTm(struct tm *timeptr, uint8_t &hundredths);
 
     /**
      * @brief Resets the configuration of the AB1805 to default settings
@@ -202,6 +206,8 @@ public:
      * 
      * @param time The number of second after January 1, 1970 UTC. 
      * 
+     * @param hundredths Optional - the hundredths value of the RTC to interrupt at
+     * 
      * @return true on success or false if an error occurs.
      * 
      * This causes an interrupt on FOUT/nIRQ in the future. It will execute
@@ -211,12 +217,14 @@ public:
      * There can only be one interrupt set. Setting at one-time or repeating interrupt
      * removes any previously set interrupt time.
      */
-    bool interruptAtTime(time_t time);
+    bool interruptAtTime(time_t time, uint8_t hundredths = 0);
 
     /**
      * @brief Set an interrupt at a time in the future using a struct tm *.
      * 
      * @param timeptr pointer to struct tm. This specifies the time (UTC).
+     * 
+     * @param hundredths Optional - the hundredths value of the RTC to interrupt at
      * 
      * @return true on success or false if an error occurs.
      * 
@@ -239,7 +247,7 @@ public:
      * - tm_year  years since 1900 (note: 2020 = 120)
      * - tm_wday  days since Sunday	0-6
      */
-    bool interruptAtTm(struct tm *timeptr);
+    bool interruptAtTm(struct tm *timeptr, uint8_t hundredths = 0);
 
     /**
      * @brief Set a repeating interrupt
@@ -247,6 +255,8 @@ public:
      * @param timeptr pointer to struct tm. This specifies the time (UTC).
      * 
      * @param rptValue a constant for which fields of timeptr are used.
+     * 
+     * @param hundredths Optional - the hundredths value of the RTC to interrupt at
      * 
      * @return true on success or false if an error occurs.
      * 
@@ -279,7 +289,7 @@ public:
      * - tm_year  years since 1900 (note: 2020 = 120)
      * - tm_wday  days since Sunday	0-6
      */
-    bool repeatingInterrupt(struct tm *timeptr, uint8_t rptValue);
+    bool repeatingInterrupt(struct tm *timeptr, uint8_t rptValue, uint8_t hundredths = 0);
 
     /**
      * @brief Clear repeating interrupt set with `repeatingInterrupt()`.
@@ -411,6 +421,8 @@ public:
      * 
      * @param time The time (in seconds since January 1, 1970, UNIX epoch), UTC.
      * 
+     *@param hundredths The value of the hundredths position. If not specified, the default is 0. 
+     * 
      * @param lock Lock the I2C bus. Default = true. Pass false if surrounding a block of
      * related calls with a wire.lock() and wire.unlock() so the block cannot be interrupted
      * with other I2C operations.
@@ -419,12 +431,14 @@ public:
      * You normally don't need to call this yourself. You might call this if you are also getting
      * time from an external source like a GPS.
      */
-    bool setRtcFromTime(time_t time, bool lock = true);
+    bool setRtcFromTime(time_t time, uint8_t hundredths = 0, bool lock = true);
 
     /**
      * @brief Sets the RTC from a time_t
      * 
      * @param timeptr A struct tm specifying the time. 
+     * 
+     * @param hundredths The value of the hundredths position. If not specified, the default is 0.
      * 
      * @param lock Lock the I2C bus. Default = true. Pass false if surrounding a block of
      * related calls with a wire.lock() and wire.unlock() so the block cannot be interrupted
@@ -447,7 +461,7 @@ public:
      * You normally don't need to call this yourself. You might call this if you are also getting
      * time from an external source like a GPS.
      */
-    bool setRtcFromTm(const struct tm *timeptr, bool lock = true);
+    bool setRtcFromTm(const struct tm *timeptr, uint8_t hundredths = 0, bool lock = true);
 
     
     /**
