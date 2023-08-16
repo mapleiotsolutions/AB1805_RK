@@ -52,9 +52,18 @@ void AB1805::loop() {
     if (!timeSet && Time.isValid() && Particle.timeSyncedLast() != 0) {
         timeSet = true;
 
-        time_t time = Time.now();
+        time_t time = Time.now();   // Current System time after being set by the cloud
+        time_t RTC_Time;            // UNIX time value of the RTC
         uint8_t hundredths;
-        setRtcFromTime(time);
+        
+        getRtcAsTime(RTC_Time,hundredths);
+
+        int32_t deltaTime_sec = (int64_t)Time.now() - (int64_t)RTC_Time;
+
+        // If the difference in time is more than 10 seconds, then we will correct the time. Otherwise, lets keep the AB1805 time and let it slowly self correct to prevent big jumps when using LoRa nodes. 
+        if (abs(deltaTime_sec) > 10){
+            setRtcFromTime(time);
+        }
 
         time = 0;
         getRtcAsTime(time, hundredths);
@@ -87,8 +96,6 @@ bool AB1805::detectChip() {
                 break;
             }
             if (!ready) {
-                _log.info("FOUT did not go HIGH");
-
                 // May just want to return false here
             }
         }
@@ -207,6 +214,8 @@ bool AB1805::setPPMAdj(int16_t PPM_Adj) {
         Log.error("The XT frequency is too low to be calibrated");
         return false;;
     }
+
+    _log.info("PPM_Adj= %d, Adj=%d | XTCAL=%u | CMDX=%u | OFFSETX=%i",PPM_Adj, Adj, XTCAL, CMDX, OFFSETX);
 
     //Determine the value of the entire register. The offset register is 7 bit 2's complement. 
     if (OFFSETX < 0) {
@@ -413,20 +422,68 @@ bool AB1805::setRtcFromTm(const struct tm *timeptr, uint8_t hundredths,  bool lo
     return bResult;
 }
 
-bool AB1805::getRtcAsTime(time_t &time, uint8_t &hundredths) {
-    struct tm tmstruct;
-    uint8_t _hundredths;
+bool AB1805::getRtcAsTime(time_t &time, uint8_t &hundrths) {
+    struct tm tmstruct1;
+    struct tm tmstruct2;
+    struct tm tmstruct3;
+    uint8_t _hundrths1;
+    uint8_t _hundrths2;
+    uint8_t _hundrths3;
 
-    bool bResult = getRtcAsTm(&tmstruct, _hundredths);
-    if (bResult) {
-        // Technically mktime is local time, not UTC. However, the standard library
-        // is set at +0000 so the local time happens to also be UTC. This is the
-        // case even if Time.zone() is called, which only affects the Wiring
-        // API and does not affect the standard time library.
-        time = mktime(&tmstruct);
-        hundredths = _hundredths;
+    // Hundredths Synchronization per: https://abracon.com/Support/AppsManuals/Precisiontiming/AB18XX-Application-Manual.pdf section 5.6:
+    /*
+    If the Hundredths Counter is read as part of the burst read from the counter registers, the following algorithm must be used to guarantee correct read information.
+    1. Read the Counters, using a burst read. If the Hundredths Counter is neither 00 nor 99, the read is correct.
+    2. If the Hundredths Counter was 00, perform the read again. The resulting value from this second read is guaranteed to be correct.
+    3. If the Hundredths Counter was 99, perform the read again.
+    A. If the Hundredths Counter is still 99, the results of the first read are guaranteed to be correct.
+    Note that it is possible that the second read is not correct.
+    B. If the Hundredths Counter has rolled over to 00, and the Seconds Counter value from the second read is equal to the Seconds Counter value from the first read plus 1, both reads produced
+     correct values. Alternatively, perform the read again. The resulting value from this third read is guaranteed to be correct.
+    C. If the Hundredths Counter has rolled over to 00, and the Seconds Counter value from the second read is equal to the Seconds Counter value from the first read, perform the read again. The
+    resulting value from this third read is guaranteed to be correct.
+    */
+
+    // First perform a burst read:
+    bool bResult = getRtcAsTm(&tmstruct1, _hundrths1);
+
+    //2. If the Hundredths Counter was 00, perform the read again. The resulting value from this second read is guaranteed to be correct.
+    if (_hundrths1 == 0){
+        bResult = getRtcAsTm(&tmstruct2, _hundrths2);
+        time = mktime(&tmstruct2);
+        hundrths = _hundrths2;
+        return bResult;
     }
 
+    //3. If the Hundredths Counter was 99, perform the read again.
+    //     A. If the Hundredths Counter is still 99, the results of the first read are guaranteed to be correct.
+    //     Note that it is possible that the second read is not correct.
+    //     B. If the Hundredths Counter has rolled over to 00, and the Seconds Counter value from the second read is equal to the Seconds Counter value from the first read plus 1, both reads produced
+    //     correct values. Alternatively, perform the read again. The resulting value from this third read is
+    //     guaranteed to be correct.
+    //     C. If the Hundredths Counter has rolled over to 00, and the Seconds Counter value from the second read is equal to the Seconds Counter value from the first read, perform the read again. The
+    //     resulting value from this third read is guaranteed to be correct.
+    else if(_hundrths1 == 99){
+        bResult = getRtcAsTm(&tmstruct2, _hundrths2);
+        if(_hundrths2 == 99){
+            time = mktime(&tmstruct1);
+            hundrths = _hundrths1;
+        }
+        else{
+            bResult = getRtcAsTm(&tmstruct3, _hundrths3);
+            time = mktime(&tmstruct3);
+            hundrths = _hundrths3;
+            return bResult;
+        }
+    } 
+
+    // 1. Read the Counters, using a burst read. If the Hundredths Counter is neither 00 nor 99, the read is correct.
+    else{
+        time = mktime(&tmstruct1);
+        hundrths = _hundrths1;
+        return bResult;
+    }
+    
     return bResult;   
 }
 
